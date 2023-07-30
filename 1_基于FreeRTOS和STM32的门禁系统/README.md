@@ -1,4 +1,4 @@
-# 基于FreeRTOS和STM32的门禁系统
+# 基于FreeRTOS和STM32F4的门禁系统
 
 ## 所用器件
 
@@ -19,33 +19,33 @@ STM32F4探索者、RFID-RC522、SG90舵机、AS608指纹模块、4.3寸TFTLCD屏
 
 1. 拷贝正点原子探索者的库函数工程模板。
 
-![image-20230705101154416](../assets/5_基于FreeRTOS和STM32的智能门禁系统/拷贝工程.png)
+![image-20230705101154416](https://gitee.com/iot-lzw/notes/raw/master/picture/202307202025960.png)
 
 2. 在拷贝的工程里新建一个FreeRTOS文件夹。
 
-![image-20230705101723106](../assets/5_基于FreeRTOS和STM32的智能门禁系统/新建FreeRTOS文件夹.png)
+![image-20230705101723106](https://gitee.com/iot-lzw/notes/raw/master/picture/202307202024716.png)
 
 3. 将所有文件复制到新建的FreeRTOS文件夹中。
 
-![image-20230705104217943](../assets/5_基于FreeRTOS和STM32的智能门禁系统/复制Source中文件.png)
+![image-20230705104217943](https://gitee.com/iot-lzw/notes/raw/master/picture/202307202025864.png)
 
 4. 上一张图片中portable只保留下列文件。
 
-![image-20230705104517692](../assets/5_基于FreeRTOS和STM32的智能门禁系统/修减portable文件.png)
+![image-20230705104517692](https://gitee.com/iot-lzw/notes/raw/master/picture/202307202025537.png)
 
 5. 打开keil，新建两个分组FreeRTOS_CORD和FreeRTOS_PORTABLE，分组中添加的文件如下。
 
-![image-20230705104926402](../assets/5_基于FreeRTOS和STM32的智能门禁系统/FreeRTOS_CORE文件.png)
+![image-20230705104926402](https://gitee.com/iot-lzw/notes/raw/master/picture/202307202025341.png)
 
-![image-20230705105922273](../assets/5_基于FreeRTOS和STM32的智能门禁系统/FreeRTOS_PORTABLE文件.png)
+![image-20230705105922273](https://gitee.com/iot-lzw/notes/raw/master/picture/202307202025882.png)
 
-![image-20230705110143023](../assets/5_基于FreeRTOS和STM32的智能门禁系统/RVDS.png)
+![image-20230705110143023](https://gitee.com/iot-lzw/notes/raw/master/picture/202307202024288.png)
 
 （注意：这里的port.c根据具体型号选择，因为STM32F407ZGT6是Cortex-M4的，所以这里选择ARM_CM4F）
 
 6. 添加头文件。
 
-![image-20230705110446573](../assets/5_基于FreeRTOS和STM32的智能门禁系统/添加头文件.png)
+![image-20230705110446573](https://gitee.com/iot-lzw/notes/raw/master/picture/202307202025269.png)
 
 7. 编译后遇到很多问题。
 
@@ -65,11 +65,17 @@ STM32F4探索者、RFID-RC522、SG90舵机、AS608指纹模块、4.3寸TFTLCD屏
 
 2. 舵机控制原理
 
-![image-20230706141900211](../assets/5_基于FreeRTOS和STM32的智能门禁系统/image-20230706141900211.png)
+![image-20230706141900211](https://gitee.com/iot-lzw/notes/raw/master/picture/202307202026109.png)
 
 3. 舵机初始化
 
-​	使用PF9作为舵机的信号输出引脚，同时使用TIM14产生PWM波。
+main文件中初始化SG90舵机如下：
+
+```c
+SG90_Init( 40000-1, 42-1 );
+```
+
+使用PF9作为舵机的信号输出引脚，同时使用TIM14产生PWM波。
 
 ```c
 void SG90_Init(u32 arr, u32 psc)
@@ -121,7 +127,7 @@ void SG90_SetAngle( float angle )
     else if ( angle < 0 )
         angle = 0;
     
-    servo_temp = angle * 4000 / 180 + 1000;
+    servo_temp = angle * 4000 / 180 + 1000;		
     TIM_SetCompare1(TIM14,servo_temp);
 }
 ```
@@ -143,13 +149,13 @@ void SG90_SetAngle( float angle )
 
 2. 工作原理
 
-![image-20230709160755209](../assets/5_基于FreeRTOS和STM32的智能门禁系统/image-20230709160755209.png)
+![image-20230709160755209](https://gitee.com/iot-lzw/notes/raw/master/picture/202307202033443.png)
 
-![image-20230709161519881](../assets/5_基于FreeRTOS和STM32的智能门禁系统/image-20230709161519881.png)
+![image-20230709161519881](https://gitee.com/iot-lzw/notes/raw/master/picture/202307202033537.png)
 
-- 其中第0扇区的块0是用于存放厂商代码的，已经固化，不可更改，为32位（4Bytes）；
+- 其中**第0扇区的块0**是用于存放厂商代码的，已经**固化**，**不可更改**，为32位（4Bytes）；
 - 每个扇区的块0、块1和块2位数据块，可用于存储数据，每块16个字节（只有S50卡是这样）；
-- 每个扇区的块3位控制块，包含了密码A、存取控制、密码B。
+- 每个扇区的块3位控制块，包含了**密码A、存取控制、密码B**。
 
 具体原理可以参考网上：http://t.csdn.cn/2FyIV
 
@@ -189,8 +195,6 @@ void SPI1_Init( void )
 （4）验证：将读取到的ID与预先存入的ID进行比较。
 
 ```c
-unsigned char kahao1[4] = {0x8E, 0x49, 0xC3, 0x20};     //8E49C320  ————绑定的卡ID
-
 u8 Identify_CardID(void)
 {
     while(1)
@@ -226,11 +230,82 @@ u8 Identify_CardID(void)
 
 1. 引脚说明
 
-![image-20230707112845263](../assets/5_基于FreeRTOS和STM32的智能门禁系统/image-20230707112845263.png)
+![image-20230707112845263](https://gitee.com/iot-lzw/notes/raw/master/picture/202307301521628.png)
 
-2. 接线
+2. 录入指纹
 
-先与USB-TO-TTL接线，准备录入指纹。
+使用指纹模块，首先需要先录入指纹，之后才能与已有指纹库进行配对。而录入指纹可以用程序实现，也可以用指纹模块测试上位机实现，这里展示用测试上位机实现录入指纹。
+
+1）接线
+
+将AS608指纹模块与USB-TO-TTL按下表接线。
+
+| AS608 | USB-TO-TTL |
+| :---: | :--------: |
+|  Vi   |    3.3V    |
+|  Tx   |     Rx     |
+|  Rx   |     Tx     |
+|  GND  |    GND     |
+
+2）打开指纹测试
+
+![image-20230709215743536](https://gitee.com/iot-lzw/notes/raw/master/picture/202307301523947.png)
+
+3）打开设备
+
+其它一般不变，先打开“打开设备”，选择对应的端口。
+
+![image-20230709220345594](https://gitee.com/iot-lzw/notes/raw/master/picture/202307301523163.png)
+
+![image-20230709220323950](https://gitee.com/iot-lzw/notes/raw/master/picture/202307301523735.png)
+
+点击确定后，右上角显示如下提示，则打开设备成功。
+
+![image-20230730152844173](https://gitee.com/iot-lzw/notes/raw/master/picture/202307301528245.png)
+
+4）录入指纹
+
+点击”录入指纹“，进行一次指纹录入。
+
+![image-20230730153006015](https://gitee.com/iot-lzw/notes/raw/master/picture/202307301530069.png)
+
+选择这次指纹存放地址，点击OK。
+
+![image-20230730153054333](https://gitee.com/iot-lzw/notes/raw/master/picture/202307301530371.png)
+
+右上角提示将手指放在传感器上。
+
+![image-20230730153154719](https://gitee.com/iot-lzw/notes/raw/master/picture/202307301531771.png)
+
+出现下面提示，松开手指。
+
+![image-20230730153236360](https://gitee.com/iot-lzw/notes/raw/master/picture/202307301532404.png)
+
+之后会要求再次将手指放在传感器上，进行上一步操作后，指纹添加成功，提示如下：
+
+![image-20230730153320270](https://gitee.com/iot-lzw/notes/raw/master/picture/202307301533328.png)
+
+5）验证指纹
+
+录入成功后，验证是否添加成功。
+
+选择地址为2的指纹模板，点击右边的”单一比对“。
+
+之后将手指放上去，进行指纹匹配。
+
+![image-20230730153650792](https://gitee.com/iot-lzw/notes/raw/master/picture/202307301536840.png)
+
+![image-20230730153714544](https://gitee.com/iot-lzw/notes/raw/master/picture/202307301537600.png)
+
+匹配成功后，右上角提示匹配结果、指纹ID、用时和得分。
+
+![image-20230730153727147](https://gitee.com/iot-lzw/notes/raw/master/picture/202307301537216.png)
+
+
+
+3. 接线
+
+录好指纹后，将AS608与STM32F4探索者接线。
 
 | AS608指纹模块 |           STM32F4探索者           |
 | :-----------: | :-------------------------------: |
@@ -243,34 +318,65 @@ u8 Identify_CardID(void)
 |    D+ / U+    |               不接                |
 |    D- / U-    |               不接                |
 
-3. 工作原理
+4. 工作原理
 
-​	AS608通信方式有两种，串口通讯和USB通讯，这里使用串口通讯。而使用串口通信是通过发送一个个数据包/指令包进行通讯。
+AS608通信方式有两种，串口通讯和USB通讯，这里使用串口通讯。而使用串口通信是通过发送一个个数据包/指令包进行通讯。
 
-![image-20230709214208984](../assets/5_基于FreeRTOS和STM32的智能门禁系统/image-20230709214208984.png)
+![image-20230709214208984](https://gitee.com/iot-lzw/notes/raw/master/picture/202307301542674.png)
 
-​	使用指纹模块，首先需要先录入指纹，之后才能与已有指纹库进行配对。而录入指纹可以用程序实现，也可以用指纹模块测试上位机实现，这里展示用测试上位机实现录入指纹。
+5. 主要代码
 
-（1）接线
+```c
+void AS608_Init ( void )
+{
+    printf("\r\n与AS608模块握手....\r\n");
+    while(PS_HandShake(&AS608Addr))//与AS608模块握手
+    {
+        delay_ms(400);
+        printf("\r\n未检测到模块!!!\r\n");
+        delay_ms(800);
+        printf("\r\n尝试连接模块...\r\n");
+    }
+    printf("\r\n通讯成功!!!\r\n");
 
-| AS608 | USB-TO-TTL |
-| :---: | :--------: |
-|  Vi   |    3.3V    |
-|  Tx   |     Rx     |
-|  Rx   |     Tx     |
-|  GND  |    GND     |
+    ensure1=PS_ValidTempleteNum(&ValidN);//读库指纹个数
 
-（2）打开指纹测试
+    ensure1=PS_ReadSysPara(&AS608Para);  //读参数
+}
 
-![image-20230709215743536](../assets/5_基于FreeRTOS和STM32的智能门禁系统/image-20230709215743536.png)
+u8 press_FR(void)
+{
+    SearchResult seach;
+    u8 ensure;
 
-（3）打开设备
+    ensure=PS_GetImage();
+    if(ensure==0x00)//获取图像成功
+    {
+        printf("获取图像成功\r\n");
+        ensure=PS_GenChar(CharBuffer1);
+        if(ensure==0x00) //生成特征成功
+        {
+            printf("生成特征成功\r\n");
+            ensure=PS_HighSpeedSearch(CharBuffer1,0,AS608Para.PS_max,&seach);
+            if(ensure==0x00)//搜索成功
+            {
+                printf("正确\r\n");
+                return 1;
+            }
+            else
+            {
+                printf("错误\r\n");
+                return 0;
+            }
+        }
+        delay_ms(200);
 
-其它一般不变，先打开“打开设备”，选择对应的端口。
+    }
+    return 3;
+}
+```
 
-![image-20230709220345594](../assets/5_基于FreeRTOS和STM32的智能门禁系统/image-20230709220345594.png)
 
-![image-20230709220323950](../assets/5_基于FreeRTOS和STM32的智能门禁系统/image-20230709220323950.png)
 
 ## 触摸密码键盘
 
@@ -278,7 +384,7 @@ u8 Identify_CardID(void)
 
 ​	将正点原子例程 实验28 触摸屏实验 中的文件复制到该工程中，复制文件如下：
 
-![image-20230710110925544](../assets/5_基于FreeRTOS和STM32的智能门禁系统/image-20230710110925544.png)
+![image-20230710110925544](https://gitee.com/iot-lzw/notes/raw/master/picture/202307301546803.png)
 
 2. 思路介绍
 
@@ -286,7 +392,7 @@ u8 Identify_CardID(void)
 
 大体样式如下：
 
-![image-20230730104706109](https://gitee.com/iot-lzw/notes/raw/master/picture/202307301047249.png)
+![image-20230730104706109](https://gitee.com/iot-lzw/notes/raw/master/picture/202307301546823.png)
 
 - coded：文本显示，无用。
 - :***    ：密码框，每次点击数字键，生成一个⭐，最多三位。
@@ -303,7 +409,7 @@ u8 Identify_CardID(void)
 
 打开lcd.c文件，在最后添加一些函数。
 
-```C
+```c
 //细节到工程看代码
 void Show_Str(u16 x,u16 y,u16 width,u16 height,u8*str,u8 size,u8 mode);
 void Show_Str_Mid(u16 x,u16 y,u8*str,u8 size,u8 len);
