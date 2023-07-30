@@ -1,0 +1,319 @@
+#include "stm32f4xx.h"
+#include <string.h>
+/* SYSTEM */
+#include "usart.h"
+#include "delay.h"
+/* HARDWARE */
+#include "led.h"
+#include "lcd.h"
+#include "key.h"
+#include "beep.h"
+#include "usart2.h"
+#include "touch.h"
+#include "sg90.h"
+#include "rc522.h"
+#include "as608.h"
+#include "esp8266.h"
+#include "usart3.h"
+/* FreeRTOS */
+#include "FreeRTOS.h"
+#include "task.h"
+#include "event_groups.h"
+
+#define START_TASK_PRIO         1
+#define START_STK_SIZE          512
+#define SG90_TASK_PRIO		    4
+#define SG90_STK_SIZE 		    512  
+#define LCD_TASK_PRIO		    3
+#define LCD_STK_SIZE 		    512  
+#define RFID_TASK_PRIO		    3
+#define RFID_STK_SIZE 		    512  
+#define AS608_TASK_PRIO		    3
+#define AS608_STK_SIZE 		    512  
+#define ESP8266_TASK_PRIO		3
+#define ESP8266_STK_SIZE 		512 
+
+#define EVENTBIT_0	    (1<<0)				//事件位
+#define EVENTBIT_1	    (1<<1)
+#define EVENTBIT_2	    (1<<2)
+#define EVENTBIT_ALL	(EVENTBIT_0|EVENTBIT_1|EVENTBIT_2)
+
+void start_task(void *param);
+void SG90_task(void *pvParameters);
+void LCD_task(void *pvParameters);
+void RFID_task(void *pvParameters);
+void AS608_task(void *pvParameters);
+void ESP8266_task(void *pvParameters);
+
+TaskHandle_t StartTask_Handler;
+TaskHandle_t SG90Task_Handler;
+TaskHandle_t LCDTask_Handler;
+TaskHandle_t RFIDTask_Handler;
+TaskHandle_t AS608Task_Handler;
+TaskHandle_t ESP8266Task_Handler;
+EventGroupHandle_t EventGroupHandler;
+
+ 
+const char* kbd_menu[15] = { "coded"," : ","lock","1","2","3","4","5","6","7","8","9","DEL","0","Enter" };   //按键表
+u8 key;
+u8 sg90flag;
+u8 rfidflag;
+u8 key;
+u8 err=0;
+
+int main(void)
+{
+    NVIC_PriorityGroupConfig(NVIC_PriorityGroup_2);//设置系统中断优先级分组2
+    uart_init(115200);
+    delay_init(168);
+    
+    LED_Init();
+    LCD_Init();
+    KEY_Init();
+    BEEP_Init();
+    SG90_Init( 40000-1, 42-1 );
+    tp_dev.init();      //触摸屏初始化
+    RC522_Init();
+    usart2_init(57600);//初始化串口2,用于与指纹模块通讯
+    PS_StaGPIO_Init();	//初始化FR读状态引脚
+    AS608_Init();
+    
+    if( !(tp_dev.touchtype & 0x80) )       //如果是电阻屏，进行校准
+    {
+        LCD_ShowString(0,30,200,16,16, (u8*)"Adjust the LCD ?");
+		POINT_COLOR=BLUE;
+		LCD_ShowString(0,60,200,16,16, (u8*)"yes:KEY1 no:KEY0");
+        
+        while(1)
+        {
+            key = KEY_Scan(0);
+            if(key == KEY0_PRES)
+                break;
+            if(key == KEY1_PRES)
+            {
+                LCD_Clear(WHITE);
+                TP_Adjust();
+                TP_Save_Adjdata();
+                break;
+            }
+        }
+    }
+    
+    AS608_load_keyboard( 15, 350, (u8**)kbd_menu );
+
+    Chinese_Show_one(180,20,0,16,0);    /* 智能门禁系统 */
+	Chinese_Show_one(200,20,2,16,0);
+	Chinese_Show_one(220,20,4,16,0);
+	Chinese_Show_one(240,20,6,16,0);
+	Chinese_Show_one(260,20,8,16,0);
+	Chinese_Show_one(280,20,10,16,0);
+    
+    xTaskCreate(start_task, "start_task", START_STK_SIZE, NULL, START_TASK_PRIO, &StartTask_Handler);
+    
+    /* 开启任务调度 */
+    vTaskStartScheduler();
+}
+
+void start_task(void *param)
+{
+    BaseType_t xReturn;
+    taskENTER_CRITICAL();           //进入临界区
+    
+    EventGroupHandler = xEventGroupCreate();
+    if ( EventGroupHandler != NULL )
+        printf ( "xEventGroupCreate事件组创建成功\r\n" );
+    else 
+        printf ( "xEventGroupCreate事件组创建失败\r\n" );
+    
+    xReturn = xTaskCreate ( SG90_task, "SG90_task", SG90_STK_SIZE, NULL, SG90_TASK_PRIO, &SG90Task_Handler );
+    if ( xReturn == pdPASS )
+        printf ( "SG90_task任务创建成功\r\n" );
+    
+    xReturn = xTaskCreate ( LCD_task, "LCD_task", LCD_STK_SIZE, NULL, LCD_TASK_PRIO, &LCDTask_Handler );
+    if ( xReturn == pdPASS )
+        printf ( "LCD_task任务创建成功\r\n" );
+    
+    xReturn = xTaskCreate( RFID_task, "RFID_task", RFID_STK_SIZE, NULL, RFID_TASK_PRIO, &RFIDTask_Handler ); 
+    if(xReturn==pdPASS)
+		printf("RFID_task任务创建成功\r\n");
+    
+    xReturn = xTaskCreate( AS608_task, "AS608_task", AS608_STK_SIZE, NULL, AS608_TASK_PRIO, &AS608Task_Handler ); 
+    if(xReturn==pdPASS)
+        printf("AS608_task任务创建成功\r\n");
+    
+    xReturn = xTaskCreate( ESP8266_task, "ESP8266_task", ESP8266_STK_SIZE, NULL, ESP8266_TASK_PRIO, &ESP8266Task_Handler ); 
+    if(xReturn==pdPASS)
+		printf("ESP8266_task任务创建成功\r\n");
+    
+    vTaskDelete(StartTask_Handler); //删除开始任务
+    taskEXIT_CRITICAL();            //退出临界区
+}
+
+void SG90_task(void *pvParameters)
+{
+    volatile EventBits_t EventValue;
+    
+    while ( 1 )
+    {
+        EventValue = xEventGroupWaitBits ( EventGroupHandler, EVENTBIT_ALL, pdTRUE, pdFALSE, portMAX_DELAY );
+        printf ( "接收事件成功\r\n" );
+        SG90_SetAngle ( 180 );
+        delay_xms ( 1000 );
+        delay_xms ( 1000 );
+        SG90_SetAngle ( 0 );
+        LCD_ShowString ( 80,150,260,16,16, (u8*)"              " );
+        
+        vTaskDelay(100);    //延时10ms，也就是10个时钟节拍
+    }
+}
+
+void LCD_task(void *pvParameters)
+{
+    while ( 1 )
+    {
+        if ( sg90flag == 1 || GET_NUM() )
+        {
+            BEEP=1;
+            delay_xms(100);
+            BEEP=0;
+            printf("密码输入正确\r\n");
+            LCD_ShowString(80,150,260,16,16, (u8*)"password match");
+            xEventGroupSetBits(EventGroupHandler,EVENTBIT_0);
+        }
+        else
+        {
+            BEEP=1;
+            delay_xms(50);
+            BEEP=0;
+            delay_xms(50);
+            BEEP=1;
+            delay_xms(50);
+            BEEP=0;
+            delay_xms(50);
+            BEEP=1;
+            delay_xms(50);
+            BEEP=0;
+            printf("密码输入错误\r\n");
+            LCD_ShowString(80,150,260,16,16,"password error");
+            err++;
+            if(err==3)
+            {
+                vTaskSuspend(SG90Task_Handler);
+                printf("舵机任务挂起\r\n");
+                LCD_ShowString(0,100,260,16,16,"Task has been suspended");
+            }
+        }
+        vTaskDelay(100); //延时10ms，也就是10个时钟节拍
+    }
+}    
+
+void RFID_task(void *pvParameters)
+{
+    while ( 1 )
+    {
+        if ( rfidflag == 1 || Identify_CardID() )
+        {
+            BEEP=1;
+            delay_xms(100);
+            BEEP=0;
+            Chinese_Show_two(30,50,16,16,0);
+            Chinese_Show_two(50,50,18,16,0);
+            Chinese_Show_two(70,50,20,16,0);
+            Chinese_Show_two(90,50,8,16,0);
+            Chinese_Show_two(110,50,10,16,0);
+
+            xEventGroupSetBits(EventGroupHandler,EVENTBIT_1);
+            printf("识别卡号成功\r\n");
+        }
+        else if(Identify_CardID()==0)
+        {
+            BEEP=1;
+            delay_xms(50);
+            BEEP=0;
+            delay_xms(50);
+            BEEP=1;
+            delay_xms(50);
+            BEEP=0;
+            delay_xms(50);
+            BEEP=1;
+            delay_xms(50);
+            BEEP=0;
+            Chinese_Show_two(90,50,12,16,0);
+            Chinese_Show_two(110,50,14,16,0);
+            printf("识别卡号失败\r\n");
+            err++;
+            if(err==3)
+            {
+                vTaskSuspend(SG90Task_Handler);
+                printf("舵机任务挂起\r\n");
+                LCD_ShowString(0,100,260,16,16,"Task has been suspended");
+            }
+        }
+        vTaskDelay(100); //延时10ms，也就是10个时钟节拍
+    }
+}    
+
+void AS608_task(void *pvParameters)   
+{
+    while ( 1 )
+    {
+        if ( PS_Sta )   //如果有手指按下
+        {
+            if ( press_FR() == 1 )
+            {
+                BEEP=1;
+                delay_xms(100);
+                BEEP=0;
+                Chinese_Show_two(30,25,0,16,0);
+                Chinese_Show_two(50,25,2,16,0);
+                Chinese_Show_two(70,25,4,16,0);
+                Chinese_Show_two(90,25,6,16,0);
+                Chinese_Show_two(110,25,8,16,0);
+                Chinese_Show_two(130,25,10,16,0);
+                xEventGroupSetBits(EventGroupHandler,EVENTBIT_2);
+                printf("指纹识别成功");
+            }
+            else if(press_FR()==0)
+            {
+                BEEP=1;
+                delay_xms(50);
+                BEEP=0;
+                delay_xms(50);
+                BEEP=1;
+                delay_xms(50);
+                BEEP=0;
+                delay_xms(50);
+                BEEP=1;
+                delay_xms(50);
+                BEEP=0;
+                Chinese_Show_two(110,25,12,16,0);
+                Chinese_Show_two(130,25,14,16,0);
+                printf("指纹识别失败");
+                err++;
+                if(err==3)
+                {
+                    vTaskSuspend(SG90Task_Handler);
+                    printf("舵机任务挂起\r\n");
+                    LCD_ShowString(0,100,260,16,16,"Task has been suspended");
+                }
+            }
+        }
+        vTaskDelay(100);
+    }
+}
+
+void ESP8266_task(void *pvParameters)
+{
+    while ( 1 );
+}
+
+
+
+
+
+
+
+
+
+
+
