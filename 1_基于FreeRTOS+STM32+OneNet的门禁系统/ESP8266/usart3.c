@@ -24,8 +24,8 @@ void USART3_Init( u32 bound )
     RCC_AHB1PeriphClockCmd( RCC_AHB1Periph_GPIOB, ENABLE );     //使能GPIOB时钟 
     RCC_APB1PeriphClockCmd( RCC_APB1Periph_USART3, ENABLE );    //使能USART3时钟
 
-    GPIO_PinAFConfig( GPIOB, GPIO_PinSource10, GPIO_AF_USART3 );      //PA2复用为USART3
-    GPIO_PinAFConfig( GPIOB, GPIO_PinSource11, GPIO_AF_USART3 );      //PA3复用为USART3
+    GPIO_PinAFConfig( GPIOB, GPIO_PinSource10, GPIO_AF_USART3 );      //PB10复用为USART3
+    GPIO_PinAFConfig( GPIOB, GPIO_PinSource11, GPIO_AF_USART3 );      //PB11复用为USART3
 
     GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10 | GPIO_Pin_11;      //USART3的TX(PB10)、RX(PB11)
     GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;           //IO速率50M

@@ -67,8 +67,8 @@ u8 rfidflag;
 u8 key;
 u8 err=0;
 
-const char *Tips = "ESP";           //订阅
-const char *topics[] = {"TEST"};    //发布
+const char *Tips = "ESP";           //发布
+const char *topics[] = {"TEST"};    //订阅
 char Pub_Buf[1024];
 
 int main(void)
@@ -85,6 +85,7 @@ int main(void)
     tp_dev.init();      //触摸屏初始化
     RC522_Init();
     usart2_init(57600);//初始化串口2,用于与指纹模块通讯
+    USART3_Init(115200);
     PS_StaGPIO_Init();	//初始化FR读状态引脚
     AS608_Init(); 
 
@@ -352,14 +353,21 @@ void OneNet_task(void *pvParameters)
             OneNet_RevPro( dataPtr );
         }
         timeCount++;
+        
+//        if (timeCount % 200 == 0 )
+//        {
+//            sprintf( Pub_Buf, "{\"Test\":%d}", 1 );
+//            OneNet_Publish( Tips, Pub_Buf );
+//        }
+        
+        if( timeCount % 400 == 0 )
+        {
+            OneNet_SendData();              //数据点上传数据给OneNet平台
+            ESP8266_Clear();
+            timeCount = 0;
+        }
     }
     
-    if( timeCount % 400 == 0 )
-    {
-        OneNet_SendData();              //数据点上传数据给OneNet平台
-        ESP8266_Clear();
-        timeCount = 0;
-    }
 }
 
 

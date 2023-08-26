@@ -41,17 +41,18 @@
 #include "usart3.h"
 #include "delay.h"
 #include "led.h"
+#include "sg90.h"
 
 //C¿â
 #include <string.h>
 #include <stdio.h>
 
 
-#define PROID		"613913"
+#define PROID		"614175"
 
-#define AUTH_INFO	"F401"
+#define AUTH_INFO	"1111"
 
-#define DEVID		"1124168039"
+#define DEVID		"1129811172"
 
 
 extern unsigned char esp8266_buf[128];
@@ -439,5 +440,17 @@ void OneNet_HandleData(char *req_payload, int num)
         else if( num == 1 )
             LED1 = 1;
        
+    }
+    
+    if(strstr( (char *)req_payload, "SG90" ))
+    {
+        if( num == 0 )
+        {
+            SG90_SetAngle( 0 );
+        }
+        else if( num == 1 )
+        {
+            SG90_SetAngle( 180 );
+        }
     }
 }

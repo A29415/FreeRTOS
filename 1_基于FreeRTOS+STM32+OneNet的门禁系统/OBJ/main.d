@@ -54,6 +54,7 @@
 ..\obj\main.o: ..\HARDWARE\AS608\as608.h
 ..\obj\main.o: ..\ESP8266\esp8266.h
 ..\obj\main.o: ..\ESP8266\usart3.h
+..\obj\main.o: ..\NET\OneNet\onenet.h
 ..\obj\main.o: ..\FreeRTOS\include\FreeRTOS.h
 ..\obj\main.o: D:\IOT_Hardware\Keil_5\ARM\ARMCC\Bin\..\include\stddef.h
 ..\obj\main.o: ..\FreeRTOS\include\FreeRTOSConfig.h

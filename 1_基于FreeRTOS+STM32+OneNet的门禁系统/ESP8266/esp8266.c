@@ -103,7 +103,7 @@ _Bool ESP8266_SendCmd(char *cmd, char *res)
 
 	unsigned char timeOut = 200;
 
-	Usart_SendString(USART2, (unsigned char *)cmd, strlen((const char *)cmd));
+	Usart_SendString(USART3, (unsigned char *)cmd, strlen((const char *)cmd));
 
 	while (timeOut--)
 	{
@@ -144,7 +144,7 @@ void ESP8266_SendData(unsigned char *data, unsigned short len)
 	sprintf(cmdBuf, "AT+CIPSEND=%d\r\n", len); // 发送命令
 	if (!ESP8266_SendCmd(cmdBuf, ">"))		   // 收到‘>’时可以发送数据
 	{
-		Usart_SendString(USART2, data, len); // 发送设备连接请求数据
+		Usart_SendString(USART3, data, len); // 发送设备连接请求数据
 	}
 }
 

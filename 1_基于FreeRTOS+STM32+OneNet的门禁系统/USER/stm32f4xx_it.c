@@ -29,7 +29,11 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "stm32f4xx_it.h"
- 
+#include "FreeRTOS.h"
+#include "event_groups.h"
+#include "usart2.h"
+#include "led.h"
+#include "esp8266.h"
 
 /** @addtogroup Template_Project
   * @{
@@ -166,3 +170,16 @@ void DebugMon_Handler(void)
 
 
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
+
+void USART3_IRQHandler(void)
+{
+	if (USART_GetITStatus(USART3, USART_IT_RXNE) != RESET) // 接收中断
+	{
+		if (esp8266_cnt >= sizeof(esp8266_buf))
+			esp8266_cnt = 0; // 防止串口被刷爆
+		esp8266_buf[esp8266_cnt++] = USART3->DR;
+
+		USART_ClearFlag(USART3, USART_FLAG_RXNE);
+	}
+}
+

@@ -43,5 +43,6 @@
 ..\obj\onenet.o: ..\SYSTEM\delay\delay.h
 ..\obj\onenet.o: ..\SYSTEM\sys\sys.h
 ..\obj\onenet.o: ..\HARDWARE\LED\led.h
+..\obj\onenet.o: ..\HARDWARE\SG90\sg90.h
 ..\obj\onenet.o: D:\IOT_Hardware\Keil_5\ARM\ARMCC\Bin\..\include\string.h
 ..\obj\onenet.o: D:\IOT_Hardware\Keil_5\ARM\ARMCC\Bin\..\include\stdio.h
