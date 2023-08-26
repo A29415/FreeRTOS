@@ -339,7 +339,7 @@
               <MiscControls></MiscControls>
               <Define>STM32F40_41xxx,USE_STDPERIPH_DRIVER</Define>
               <Undefine></Undefine>
-              <IncludePath>..\CORE;..\SYSTEM\delay;..\SYSTEM\sys;..\SYSTEM\usart;..\USER;..\FWLIB\inc;..\FreeRTOS\portable\RVDS\ARM_CM4F;..\FreeRTOS\include;..\HARDWARE\LED;..\HARDWARE\24CXX;..\HARDWARE\IIC;..\HARDWARE\KEY;..\HARDWARE\LCD;..\HARDWARE\TOUCH;..\HARDWARE\SG90;..\HARDWARE\BEEP;..\HARDWARE\RC522;..\HARDWARE\USART2;..\HARDWARE\TIMER;..\HARDWARE\AS608;..\ESP8266</IncludePath>
+              <IncludePath>..\CORE;..\SYSTEM\delay;..\SYSTEM\sys;..\SYSTEM\usart;..\USER;..\FWLIB\inc;..\FreeRTOS\portable\RVDS\ARM_CM4F;..\FreeRTOS\include;..\HARDWARE\LED;..\HARDWARE\24CXX;..\HARDWARE\IIC;..\HARDWARE\KEY;..\HARDWARE\LCD;..\HARDWARE\TOUCH;..\HARDWARE\SG90;..\HARDWARE\BEEP;..\HARDWARE\RC522;..\HARDWARE\USART2;..\HARDWARE\TIMER;..\HARDWARE\AS608;..\ESP8266;..\NET\cJSON;..\NET\MQTT;..\NET\OneNet</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -508,10 +508,25 @@
               <FileType>1</FileType>
               <FilePath>..\ESP8266\usart3.c</FilePath>
             </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>NET</GroupName>
+          <Files>
             <File>
-              <FileName>timer5.c</FileName>
+              <FileName>cJSON.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\ESP8266\timer5.c</FilePath>
+              <FilePath>..\NET\cJSON\cJSON.c</FilePath>
+            </File>
+            <File>
+              <FileName>MqttKit.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\NET\MQTT\MqttKit.c</FilePath>
+            </File>
+            <File>
+              <FileName>onenet.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\NET\OneNet\onenet.c</FilePath>
             </File>
           </Files>
         </Group>

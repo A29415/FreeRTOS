@@ -1,6 +1,4 @@
 ..\obj\esp8266.o: ..\ESP8266\esp8266.c
-..\obj\esp8266.o: ..\ESP8266\esp8266.h
-..\obj\esp8266.o: ..\SYSTEM\sys\sys.h
 ..\obj\esp8266.o: ..\USER\stm32f4xx.h
 ..\obj\esp8266.o: ..\CORE\core_cm4.h
 ..\obj\esp8266.o: D:\IOT_Hardware\Keil_5\ARM\ARMCC\Bin\..\include\stdint.h
@@ -36,8 +34,10 @@
 ..\obj\esp8266.o: ..\FWLIB\inc\stm32f4xx_dac.h
 ..\obj\esp8266.o: ..\FWLIB\inc\stm32f4xx_dcmi.h
 ..\obj\esp8266.o: ..\FWLIB\inc\stm32f4xx_fsmc.h
+..\obj\esp8266.o: ..\ESP8266\esp8266.h
 ..\obj\esp8266.o: ..\SYSTEM\delay\delay.h
-..\obj\esp8266.o: D:\IOT_Hardware\Keil_5\ARM\ARMCC\Bin\..\include\string.h
+..\obj\esp8266.o: ..\SYSTEM\sys\sys.h
 ..\obj\esp8266.o: ..\SYSTEM\usart\usart.h
 ..\obj\esp8266.o: D:\IOT_Hardware\Keil_5\ARM\ARMCC\Bin\..\include\stdio.h
 ..\obj\esp8266.o: ..\ESP8266\usart3.h
+..\obj\esp8266.o: D:\IOT_Hardware\Keil_5\ARM\ARMCC\Bin\..\include\string.h

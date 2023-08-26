@@ -1,142 +1,135 @@
-#include "delay.h"
 #include "usart3.h"
-#include "stdarg.h"	 	 
-#include "stdio.h"	 	 
-#include "string.h"	  
-#include "timer5.h"
-#include "led.h"
-//////////////////////////////////////////////////////////////////////////////////	 
-//本程序只供学习使用，未经作者许可，不得用于其它任何用途
-//ALIENTEK STM32F4开发板
-//串口3驱动代码	   
-//正点原子@ALIENTEK
-//技术论坛:www.openedv.com
-//修改日期:2014/8/9
-//版本：V1.0
-//版权所有，盗版必究。
-//Copyright(C) 广州市星翼电子科技有限公司 2009-2019
-//All rights reserved									  
-////////////////////////////////////////////////////////////////////////////////// 	   
+#include "FreeRTOS.h"
+#include "event_groups.h"
+#include <stdarg.h>
+#include <string.h>
+#include <stdio.h>
 
-//串口发送缓存区 	
-__align(8) u8 USART3_TX_BUF[USART3_MAX_SEND_LEN]; 	//发送缓冲,最大USART3_MAX_SEND_LEN字节
-#ifdef USART3_RX_EN   								//如果使能了接收   	  
-//串口接收缓存区 	
-u8 USART3_RX_BUF[USART3_MAX_RECV_LEN]; 				//接收缓冲,最大USART3_MAX_RECV_LEN个字节.
+char USART3_TxBuff[USART3_TXBUFF_SIZE];         //暂存用于发送的数据
+char USART3_RxBuff[USART3_RXBUFF_SIZE];         //用于保存USART3接收到的数据
+uint32_t USART3_RxCounter = 0;                  //记录USART3总共接收了多少字节的数据
 
-
-//通过判断接收连续2个字符之间的时间差不大于100ms来决定是不是一次连续的数据.
-//如果2个字符接收间隔超过100ms,则认为不是1次连续数据.也就是超过100ms没有接收到
-//任何数据,则表示此次接收完毕.
-//接收到的数据状态
-//[15]:0,没有接收到数据;1,接收到了一批数据.
-//[14:0]:接收到的数据长度
-u16 USART3_RX_STA=0;   	 
-void USART3_IRQHandler(void)
+/**
+ * @name: USART3_Init
+ * @brief: USART3初始化，以及开启更新中断
+ * @param {u32} bound   ：波特率
+ * @return {*}
+ */
+void USART3_Init( u32 bound )
 {
-	u8 res;	    
-	if(USART_GetITStatus(USART3, USART_IT_RXNE) != RESET)//接收到数据
-	{	 
- 
-	res =USART_ReceiveData(USART3);
-  LED1=!LED1;
-//   LED0=!LED0;	
-	if((USART3_RX_STA&(1<<15))==0)//接收完的一批数据,还没有被处理,则不再接收其他数据
-	{ 
-		if(USART3_RX_STA<USART3_MAX_RECV_LEN)		//还可以接收数据
-		{
-			TIM_SetCounter(TIM5,0);//计数器清空        				 
-			if(USART3_RX_STA==0)		
-				TIM_Cmd(TIM5, ENABLE);  //使能定时器7 
-			
-			USART3_RX_BUF[USART3_RX_STA++]=res;		//记录接收到的值
-     		
-		}else 
-		{
-			USART3_RX_STA|=1<<15;					//强制标记接收完成
-		} 
-	}  	
- }										 
-}  
-#endif	
-//初始化IO 串口3
-//bound:波特率	  
-void usart3_init(u32 bound)
-{  
+    GPIO_InitTypeDef GPIO_InitStructure;
+    USART_InitTypeDef USART_InitStructure;
+    NVIC_InitTypeDef NVIC_InitStructure;
 
-	NVIC_InitTypeDef NVIC_InitStructure;
-	GPIO_InitTypeDef GPIO_InitStructure;
-	USART_InitTypeDef USART_InitStructure;
+    RCC_AHB1PeriphClockCmd( RCC_AHB1Periph_GPIOB, ENABLE );     //使能GPIOB时钟 
+    RCC_APB1PeriphClockCmd( RCC_APB1Periph_USART3, ENABLE );    //使能USART3时钟
 
-	
-	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOB,ENABLE); //使能GPIOB时钟
-	RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART3,ENABLE);//使能USART3时钟
+    GPIO_PinAFConfig( GPIOB, GPIO_PinSource10, GPIO_AF_USART3 );      //PA2复用为USART3
+    GPIO_PinAFConfig( GPIOB, GPIO_PinSource11, GPIO_AF_USART3 );      //PA3复用为USART3
 
- 	USART_DeInit(USART3);  //复位串口3
-	
-	GPIO_PinAFConfig(GPIOB,GPIO_PinSource11,GPIO_AF_USART3); //GPIOB11复用为USART3
-	GPIO_PinAFConfig(GPIOB,GPIO_PinSource10,GPIO_AF_USART3); //GPIOB10复用为USART3	
-	
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_11 | GPIO_Pin_10; //GPIOB11和GPIOB10初始化
-	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF;//复用功能
-	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;	//速度50MHz
-	GPIO_InitStructure.GPIO_OType = GPIO_OType_PP; //推挽复用输出
-	GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_UP; //上拉
-	GPIO_Init(GPIOB,&GPIO_InitStructure); //初始化GPIOB11，和GPIOB10
-	
-	USART_InitStructure.USART_BaudRate = bound;//波特率 
-	USART_InitStructure.USART_WordLength = USART_WordLength_8b;//字长为8位数据格式
-	USART_InitStructure.USART_StopBits = USART_StopBits_1;//一个停止位
-	USART_InitStructure.USART_Parity = USART_Parity_No;//无奇偶校验位
-	USART_InitStructure.USART_HardwareFlowControl = USART_HardwareFlowControl_None;//无硬件数据流控制
-	USART_InitStructure.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;	//收发模式
-  
-	USART_Init(USART3, &USART_InitStructure); //初始化串口3
- 
-	USART_Cmd(USART3, ENABLE);               //使能串口 
-	
-  USART_ITConfig(USART3, USART_IT_RXNE, ENABLE);//开启中断   
-	
-	NVIC_InitStructure.NVIC_IRQChannel = USART3_IRQn;
-	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority=1 ;//抢占优先级2
-	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;		//子优先级3
-	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;			//IRQ通道使能
-	NVIC_Init(&NVIC_InitStructure);	//根据指定的参数初始化VIC寄存器
-	TIM5_Int_Init(1000-1,8400-1);		//100ms中断
-	USART3_RX_STA=0;		//清零
-	TIM_Cmd(TIM5, DISABLE); //关闭定时器7
-  	
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10 | GPIO_Pin_11;      //USART3的TX(PB10)、RX(PB11)
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;           //IO速率50M
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF;                //复用模式
+    GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;              //推挽输出
+    GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_UP;                //上拉
+    GPIO_Init( GPIOB, &GPIO_InitStructure );                    //USART3初始化设置
 
+    USART_InitStructure.USART_BaudRate = bound;                                     //波特率
+    USART_InitStructure.USART_Parity = USART_Parity_No;                             //无奇偶校验位
+    USART_InitStructure.USART_StopBits = USART_StopBits_1;                          //1个停止位
+    USART_InitStructure.USART_WordLength = USART_WordLength_8b;                     //8个数据位
+    USART_InitStructure.USART_Mode = USART_Mode_Tx | USART_Mode_Rx;                 //收发模式
+    USART_InitStructure.USART_HardwareFlowControl = USART_HardwareFlowControl_None; //无硬件数据流控制
+    USART_Init( USART3, &USART_InitStructure );
+
+    USART_Cmd( USART3, ENABLE );                                //使能USART3
+
+    USART_ITConfig( USART3, USART_IT_RXNE, ENABLE );            //开启接收中断
+
+    NVIC_InitStructure.NVIC_IRQChannel = USART3_IRQn;           //设置USART3中断
+    NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;             //中断通道使能
+    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 4;   //抢占优先级
+    NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;          //响应优先级
+    NVIC_Init( &NVIC_InitStructure );                           //中断初始化
 }
 
-//串口3,printf 函数
-//确保一次发送数据不超过USART3_MAX_SEND_LEN字节
-void u3_printf(char* fmt,...)  
-{  
-	u16 i,j;
-	va_list ap;
-	va_start(ap,fmt);
-	vsprintf((char*)USART3_TX_BUF,fmt,ap);
-	va_end(ap);
-	i=strlen((const char*)USART3_TX_BUF);//此次发送数据的长度
-	for(j=0;j<i;j++)//循环发送数据
+/**
+ * @name: USART23_Printf
+ * @brief: USART3打印输出
+ * @param {char} *format    ：参数列表
+ * @return {*}
+ */
+void USART3_Printf( char *format, ... )
+{
+    uint32_t i, length;
+
+    /* VA_LIST是C中解决变参问题的一组宏，用于获取不确定个数的参数，所在头文件 #include <stdarg.h>  */
+    va_list ap;                                         //定义一个va_list的变量，表示可变参数列表类型
+    va_start( ap, format );                             //将可变参数传入列表中
+    vsprintf( USART3_TxBuff, format, ap );              //使用可变参数列表格式化输出到指定字符串中
+    va_end( ap );                                       //释放ap
+
+    length = strlen( ( const char* )USART3_TxBuff );    //获取USART3_TxBuff的长度
+    while( ( USART3->SR & 0x40 ) == 0 );                //等待上一个数据发送完成
+    for( i = 0; i < length; i++ )                       
+    {
+        USART3->DR = USART3_TxBuff[i];                  //依次发送USART3_TxBuff中的每个字节
+        while( ( USART3->SR & 0X40 ) == 0 );            //等待发送完成
+    }
+}
+
+/**
+ * @name: USART3_TxData
+ * @brief: USART3发送缓冲区中的数据
+ * @param {uint8_t} *data   ：数据
+ * @return {*}
+ */
+void USART3_TxData( uint8_t *data )
+{
+    int i;
+
+    while( ( USART3->SR & 0x40 ) == 0 );
+    for( i = 1; i < ( data[0] * 256 + data[1] ); i++ )
+    {
+        USART3->DR = data[i+1];
+        while( ( USART3->SR & 0x40 ) == 0 );
+    }
+}
+
+void Usart_SendString(USART_TypeDef *USARTx, u8 *str, u16 len)
+{
+	u16 count = 0;
+	for( ; count < len; count++)
 	{
-	  while(USART_GetFlagStatus(USART3,USART_FLAG_TC)==RESET);  //等待上次传输完成 
-		USART_SendData(USART3,(uint8_t)USART3_TX_BUF[j]); 	 //发送数据到串口3 
+		USART_SendData(USARTx, *str++);
+		while(USART_GetFlagStatus(USARTx, USART_FLAG_TC) == RESET);//等待发送完成
 	}
-	
 }
- 
- 
- 
 
-
-
-
-
-
-
-
-
-
-
+/**
+  ************************************************************************** 
+  ** -------------------------------------------------------------------- **
+  ** @函数名        : Usart_Printf
+  ** @描述          : 格式化打印
+  ** @参数          : USARTx：串口组
+**										format：不定长参
+  ** @返回值        : None
+  ** -------------------------------------------------------------------- **
+  ************************************************************************** 
+**/
+void Usart_Printf(USART_TypeDef *USARTx, char *format, ...)
+{
+	u8 str[200];
+	u8 *pstr = str;
+	
+	va_list arg;
+	va_start(arg, format);
+	vsnprintf((char *)str, sizeof(str), format, arg);
+	va_end(arg);
+	
+	while(*pstr != 0)
+	{
+		USART_SendData(USARTx, *pstr++);
+		while(USART_GetFlagStatus(USARTx, USART_FLAG_TC) == RESET);
+	}
+}

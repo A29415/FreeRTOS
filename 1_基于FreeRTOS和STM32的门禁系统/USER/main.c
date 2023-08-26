@@ -15,6 +15,8 @@
 #include "as608.h"
 #include "esp8266.h"
 #include "usart3.h"
+/* OneNet */
+#include "onenet.h"
 /* FreeRTOS */
 #include "FreeRTOS.h"
 #include "task.h"
@@ -23,19 +25,19 @@
 #define START_TASK_PRIO         1
 #define START_STK_SIZE          512
 #define SG90_TASK_PRIO		    4
-#define SG90_STK_SIZE 		    512  
+#define SG90_STK_SIZE 		    512
 #define LCD_TASK_PRIO		    3
-#define LCD_STK_SIZE 		    512  
+#define LCD_STK_SIZE 		    512
 #define RFID_TASK_PRIO		    3
-#define RFID_STK_SIZE 		    512  
+#define RFID_STK_SIZE 		    512
 #define AS608_TASK_PRIO		    3
-#define AS608_STK_SIZE 		    512  
-#define ESP8266_TASK_PRIO		3
-#define ESP8266_STK_SIZE 		512 
+#define AS608_STK_SIZE 		    512
+#define ONENET_TASK_PRIO		6
+#define ONENET_STK_SIZE 		1024
 
-#define EVENTBIT_0	    (1<<0)				//事件位
-#define EVENTBIT_1	    (1<<1)
-#define EVENTBIT_2	    (1<<2)
+#define EVENTBIT_0	    (1<<0)				//触摸密码键盘事件位
+#define EVENTBIT_1	    (1<<1)              //RFID事件位
+#define EVENTBIT_2	    (1<<2)              //指纹事件位
 #define EVENTBIT_ALL	(EVENTBIT_0|EVENTBIT_1|EVENTBIT_2)
 
 void start_task(void *param);
@@ -43,17 +45,21 @@ void SG90_task(void *pvParameters);
 void LCD_task(void *pvParameters);
 void RFID_task(void *pvParameters);
 void AS608_task(void *pvParameters);
-void ESP8266_task(void *pvParameters);
+void OneNet_task(void *pvParameters);
 
 TaskHandle_t StartTask_Handler;
 TaskHandle_t SG90Task_Handler;
 TaskHandle_t LCDTask_Handler;
 TaskHandle_t RFIDTask_Handler;
 TaskHandle_t AS608Task_Handler;
-TaskHandle_t ESP8266Task_Handler;
+TaskHandle_t OneNetTask_Handler;
 EventGroupHandle_t EventGroupHandler;
 
- 
+uint8_t SG90_Status;
+uint8_t PWD_Status;
+uint8_t RFID_Status;
+uint8_t AS608_Status;
+
 const char* kbd_menu[15] = { "coded"," : ","lock","1","2","3","4","5","6","7","8","9","DEL","0","Enter" };   //按键表
 u8 key;
 u8 sg90flag;
@@ -61,12 +67,16 @@ u8 rfidflag;
 u8 key;
 u8 err=0;
 
+const char *Tips = "ESP";           //订阅
+const char *topics[] = {"TEST"};    //发布
+char Pub_Buf[1024];
+
 int main(void)
 {
     NVIC_PriorityGroupConfig(NVIC_PriorityGroup_2);//设置系统中断优先级分组2
     uart_init(115200);
     delay_init(168);
-    
+
     LED_Init();
     LCD_Init();
     KEY_Init();
@@ -76,14 +86,14 @@ int main(void)
     RC522_Init();
     usart2_init(57600);//初始化串口2,用于与指纹模块通讯
     PS_StaGPIO_Init();	//初始化FR读状态引脚
-    AS608_Init();
-    
+    AS608_Init(); 
+
     if( !(tp_dev.touchtype & 0x80) )       //如果是电阻屏，进行校准
     {
         LCD_ShowString(0,30,200,16,16, (u8*)"Adjust the LCD ?");
-		POINT_COLOR=BLUE;
-		LCD_ShowString(0,60,200,16,16, (u8*)"yes:KEY1 no:KEY0");
-        
+        POINT_COLOR=BLUE;
+        LCD_ShowString(0,60,200,16,16, (u8*)"yes:KEY1 no:KEY0");
+
         while(1)
         {
             key = KEY_Scan(0);
@@ -98,18 +108,18 @@ int main(void)
             }
         }
     }
-    
+
     AS608_load_keyboard( 15, 350, (u8**)kbd_menu );
 
     Chinese_Show_one(180,20,0,16,0);    /* 智能门禁系统 */
-	Chinese_Show_one(200,20,2,16,0);
-	Chinese_Show_one(220,20,4,16,0);
-	Chinese_Show_one(240,20,6,16,0);
-	Chinese_Show_one(260,20,8,16,0);
-	Chinese_Show_one(280,20,10,16,0);
-    
+    Chinese_Show_one(200,20,2,16,0);
+    Chinese_Show_one(220,20,4,16,0);
+    Chinese_Show_one(240,20,6,16,0);
+    Chinese_Show_one(260,20,8,16,0);
+    Chinese_Show_one(280,20,10,16,0);
+
     xTaskCreate(start_task, "start_task", START_STK_SIZE, NULL, START_TASK_PRIO, &StartTask_Handler);
-    
+
     /* 开启任务调度 */
     vTaskStartScheduler();
 }
@@ -118,33 +128,33 @@ void start_task(void *param)
 {
     BaseType_t xReturn;
     taskENTER_CRITICAL();           //进入临界区
-    
+
     EventGroupHandler = xEventGroupCreate();
     if ( EventGroupHandler != NULL )
         printf ( "xEventGroupCreate事件组创建成功\r\n" );
-    else 
+    else
         printf ( "xEventGroupCreate事件组创建失败\r\n" );
-    
+
     xReturn = xTaskCreate ( SG90_task, "SG90_task", SG90_STK_SIZE, NULL, SG90_TASK_PRIO, &SG90Task_Handler );
     if ( xReturn == pdPASS )
         printf ( "SG90_task任务创建成功\r\n" );
-    
+
     xReturn = xTaskCreate ( LCD_task, "LCD_task", LCD_STK_SIZE, NULL, LCD_TASK_PRIO, &LCDTask_Handler );
     if ( xReturn == pdPASS )
         printf ( "LCD_task任务创建成功\r\n" );
-    
-    xReturn = xTaskCreate( RFID_task, "RFID_task", RFID_STK_SIZE, NULL, RFID_TASK_PRIO, &RFIDTask_Handler ); 
+
+    xReturn = xTaskCreate( RFID_task, "RFID_task", RFID_STK_SIZE, NULL, RFID_TASK_PRIO, &RFIDTask_Handler );
     if(xReturn==pdPASS)
-		printf("RFID_task任务创建成功\r\n");
-    
-    xReturn = xTaskCreate( AS608_task, "AS608_task", AS608_STK_SIZE, NULL, AS608_TASK_PRIO, &AS608Task_Handler ); 
+        printf("RFID_task任务创建成功\r\n");
+
+    xReturn = xTaskCreate( AS608_task, "AS608_task", AS608_STK_SIZE, NULL, AS608_TASK_PRIO, &AS608Task_Handler );
     if(xReturn==pdPASS)
         printf("AS608_task任务创建成功\r\n");
-    
-    xReturn = xTaskCreate( ESP8266_task, "ESP8266_task", ESP8266_STK_SIZE, NULL, ESP8266_TASK_PRIO, &ESP8266Task_Handler ); 
+
+    xReturn = xTaskCreate( OneNet_task, "ESP8266_task", ONENET_STK_SIZE, NULL, ONENET_TASK_PRIO, &OneNetTask_Handler );
     if(xReturn==pdPASS)
-		printf("ESP8266_task任务创建成功\r\n");
-    
+        printf("OneNet_task任务创建成功\r\n");
+
     vTaskDelete(StartTask_Handler); //删除开始任务
     taskEXIT_CRITICAL();            //退出临界区
 }
@@ -152,7 +162,7 @@ void start_task(void *param)
 void SG90_task(void *pvParameters)
 {
     volatile EventBits_t EventValue;
-    
+
     while ( 1 )
     {
         EventValue = xEventGroupWaitBits ( EventGroupHandler, EVENTBIT_ALL, pdTRUE, pdFALSE, portMAX_DELAY );
@@ -163,6 +173,9 @@ void SG90_task(void *pvParameters)
         SG90_SetAngle ( 0 );
         LCD_ShowString ( 80,150,260,16,16, (u8*)"              " );
         
+        sprintf( Pub_Buf, "{\"SG90\":%d}", SG90_Status );
+        OneNet_Publish( Tips, Pub_Buf );
+
         vTaskDelay(100);    //延时10ms，也就是10个时钟节拍
     }
 }
@@ -173,6 +186,7 @@ void LCD_task(void *pvParameters)
     {
         if ( sg90flag == 1 || GET_NUM() )
         {
+            PWD_Status = 1;
             BEEP=1;
             delay_xms(100);
             BEEP=0;
@@ -182,6 +196,7 @@ void LCD_task(void *pvParameters)
         }
         else
         {
+            PWD_Status = -1;
             BEEP=1;
             delay_xms(50);
             BEEP=0;
@@ -203,9 +218,13 @@ void LCD_task(void *pvParameters)
                 LCD_ShowString(0,100,260,16,16,"Task has been suspended");
             }
         }
+        
+        sprintf( Pub_Buf, "{\"Password\":%d}", PWD_Status );
+        OneNet_Publish( Tips, Pub_Buf );
+        
         vTaskDelay(100); //延时10ms，也就是10个时钟节拍
     }
-}    
+}
 
 void RFID_task(void *pvParameters)
 {
@@ -213,6 +232,7 @@ void RFID_task(void *pvParameters)
     {
         if ( rfidflag == 1 || Identify_CardID() )
         {
+            RFID_Status = 1;
             BEEP=1;
             delay_xms(100);
             BEEP=0;
@@ -227,6 +247,7 @@ void RFID_task(void *pvParameters)
         }
         else if(Identify_CardID()==0)
         {
+            RFID_Status = -1;
             BEEP=1;
             delay_xms(50);
             BEEP=0;
@@ -249,11 +270,15 @@ void RFID_task(void *pvParameters)
                 LCD_ShowString(0,100,260,16,16,"Task has been suspended");
             }
         }
+        
+        sprintf( Pub_Buf, "{\"RFID\":%d}", RFID_Status );
+        OneNet_Publish( Tips, Pub_Buf );
+        
         vTaskDelay(100); //延时10ms，也就是10个时钟节拍
     }
-}    
+}
 
-void AS608_task(void *pvParameters)   
+void AS608_task(void *pvParameters)
 {
     while ( 1 )
     {
@@ -261,6 +286,7 @@ void AS608_task(void *pvParameters)
         {
             if ( press_FR() == 1 )
             {
+                AS608_Status = 1;
                 BEEP=1;
                 delay_xms(100);
                 BEEP=0;
@@ -275,6 +301,7 @@ void AS608_task(void *pvParameters)
             }
             else if(press_FR()==0)
             {
+                AS608_Status = -1;
                 BEEP=1;
                 delay_xms(50);
                 BEEP=0;
@@ -298,13 +325,41 @@ void AS608_task(void *pvParameters)
                 }
             }
         }
+        
+        sprintf( Pub_Buf, "{\"AS608\":%d}", AS608_Status );
+        OneNet_Publish( Tips, Pub_Buf );
+        
         vTaskDelay(100);
     }
 }
 
-void ESP8266_task(void *pvParameters)
+void OneNet_task(void *pvParameters)
 {
-    while ( 1 );
+    uint16_t timeCount = 0;
+    uint8_t *dataPtr = NULL;
+
+    ESP8266_Init();
+    while( OneNet_DevLink() )
+        delay_ms( 500 );
+    OneNet_Subscribe( topics, 1 );
+
+    while( 1 )
+    {
+        delay_ms( 10 );
+        dataPtr = ESP8266_GetIPD( 0 );
+        if( dataPtr != NULL )
+        {
+            OneNet_RevPro( dataPtr );
+        }
+        timeCount++;
+    }
+    
+    if( timeCount % 400 == 0 )
+    {
+        OneNet_SendData();              //数据点上传数据给OneNet平台
+        ESP8266_Clear();
+        timeCount = 0;
+    }
 }
 
 

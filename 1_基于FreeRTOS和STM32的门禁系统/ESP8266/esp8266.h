@@ -1,11 +1,21 @@
-#ifndef __ESP8266_H__
-#define __ESP8266_H__
-#include "sys.h" 
+#ifndef __ESP8266_H
+#define __ESP8266_H
 
-void esp8266_start_trans(void);
-u8 esp8266_send_cmd(u8 *cmd,u8 *ack,u16 waittime);
-u8* esp8266_check_cmd(u8 *str);
+#define REV_OK		0	//接收完成标志
+#define REV_WAIT	1	//接收未完成标志
 
+extern unsigned char esp8266_buf[128];
+extern unsigned short esp8266_cnt;
+extern unsigned short esp8266_cntPre;
+
+
+void ESP8266_Init(void);
+
+void ESP8266_Clear(void);
+
+void ESP8266_SendData(unsigned char *data, unsigned short len);
+
+unsigned char *ESP8266_GetIPD(unsigned short timeOut);
 
 
 #endif
